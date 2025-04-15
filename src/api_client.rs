@@ -38,11 +38,17 @@ impl From<String> for LLMError {
 pub const MAX_RETRY_ATTEMPTS: u32 = 10;
 pub const RETRY_DELAY_SECONDS: u64 = 30;
 
-#[async_trait::async_trait]
-pub trait LLMClient {
-    async fn generate_response(&self, prompt: &str, system_prompt: &str) -> Result<String, LLMError>;
+// Response from API attempt containing both result and used token info
+pub struct AttemptResult {
+    pub result: Result<String, LLMError>
 }
 
+#[async_trait::async_trait]
+pub trait LLMClient {
+    async fn generate_response(&self, prompt: &str, system_prompt: &str, initial_token_id: i64) -> Result<String, LLMError>;
+}
+
+#[derive(Clone)]
 pub struct GeminiClient {
     api_key: String,
 }
@@ -117,23 +123,58 @@ impl GeminiClient {
             Err(LLMError(format!("Error: {} - {}", status, error_text)))
         }
     }
+
+    async fn attempt_with_token(&self, prompt: &str, system_prompt: &str) -> AttemptResult {
+        let result = self.attempt_generate(prompt, system_prompt).await;
+        AttemptResult { result }
+    }
 }
 
 #[async_trait::async_trait]
 impl LLMClient for GeminiClient {
-    async fn generate_response(&self, prompt: &str, system_prompt: &str) -> Result<String, LLMError> {
+    async fn generate_response(&self, prompt: &str, system_prompt: &str, initial_token_id: i64) -> Result<String, LLMError> {
         let mut attempts = 0;
+        let mut current_token_id = initial_token_id;
+        let mut current_client = self.clone();
         
         loop {
-            match self.attempt_generate(prompt, system_prompt).await {
-                Ok(response) => return Ok(response),
+            let attempt_result = current_client.attempt_with_token(prompt, system_prompt).await;
+            
+            match attempt_result.result {
+                Ok(response) => {
+                    // If successful and token had trouble_delay = 1, clear it
+                    if let Err(e) = crate::db_client::clear_token_trouble(current_token_id) {
+                        println!("Warning: Failed to clear token trouble status: {}", e);
+                    }
+                    return Ok(response)
+                },
                 Err(e) => {
                     attempts += 1;
+                    
+                    // Mark current token as troubled
+                    if let Err(db_err) = crate::db_client::mark_token_trouble(current_token_id) {
+                        println!("Warning: Failed to mark token as troubled: {}", db_err);
+                    }
+
                     if attempts >= MAX_RETRY_ATTEMPTS {
                         return Err(LLMError(format!("Max retry attempts ({}) reached. Last error: {}", MAX_RETRY_ATTEMPTS, e)));
                     }
-                    println!("Attempt {} failed: {}. Retrying in {} seconds...", attempts, e, RETRY_DELAY_SECONDS);
-                    sleep(Duration::from_secs(RETRY_DELAY_SECONDS)).await;
+
+                    // Try to get a new token
+                    match crate::db_client::get_next_token() {
+                        Ok(Some(new_token)) => {
+                            println!("Attempt {} failed: {}. Using new token for retry in {} seconds...", attempts, e, RETRY_DELAY_SECONDS);
+                            current_token_id = new_token.id;
+                            current_client = GeminiClient::new(new_token.token);
+                            sleep(Duration::from_secs(RETRY_DELAY_SECONDS)).await;
+                        },
+                        Ok(None) => {
+                            return Err(LLMError("No available tokens for retry".to_string()));
+                        },
+                        Err(db_err) => {
+                            return Err(LLMError(format!("Failed to get new token for retry: {}", db_err)));
+                        }
+                    }
                 }
             }
         }

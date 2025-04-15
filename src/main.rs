@@ -1,4 +1,4 @@
-mod read_token_list;
+mod db_client;
 mod api_client;
 mod log_client;
 
@@ -64,7 +64,7 @@ async fn handle_chat_request(
     };
 
     // Get a token from the database
-    let token = match read_token_list::get_next_token() {
+    let token = match db_client::get_next_token() {
         Ok(Some(token)) => token,
         Ok(None) => return Json(Err(ErrorResponse {
             error: "No available tokens".to_string()
@@ -78,7 +78,7 @@ async fn handle_chat_request(
     let response = match token.token_type.as_str() {
         "gemini" => {
             let client = GeminiClient::new(token.token.clone());
-            client.generate_response(&request.prompt, &request.system_prompt).await
+            client.generate_response(&request.prompt, &request.system_prompt, token.id).await
         },
         _ => Err(LLMError("Unsupported token type".to_string())),
     };

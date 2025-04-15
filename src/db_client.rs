@@ -5,9 +5,6 @@ pub struct Token {
     pub id: i64,
     pub token: String,
     pub token_type: String,
-    triggered_on: Option<i64>,
-    delay_by_second: i64,
-    pub trouble_delay: i8,
 }
 
 pub fn get_next_token() -> Result<Option<Token>> {
@@ -33,9 +30,6 @@ pub fn get_next_token() -> Result<Option<Token>> {
             id: row.get(0)?,
             token: row.get(1)?,
             token_type: row.get(2)?,
-            triggered_on: row.get(3)?,
-            delay_by_second: row.get(4)?,
-            trouble_delay: row.get(5)?,
         })
     }).optional()?;
 
@@ -47,6 +41,41 @@ pub fn get_next_token() -> Result<Option<Token>> {
         )?;
     }
     
-    
     Ok(token)
+}
+
+pub fn mark_token_trouble(token_id: i64) -> Result<()> {
+    let conn = Connection::open("data.db")?;
+    
+    // Update trouble_delay to 1 and add 1 hour to delay_by_second
+    conn.execute(
+        "UPDATE TOKENS SET 
+        trouble_delay = 1, 
+        delay_by_second = delay_by_second + 3600 
+        WHERE id = ?",
+        params![token_id],
+    )?;
+    
+    Ok(())
+}
+
+pub fn clear_token_trouble(token_id: i64) -> Result<()> {
+    let conn = Connection::open("data.db")?;
+
+    // First, check if the token has trouble_delay = 1
+    let mut stmt = conn.prepare("SELECT trouble_delay FROM TOKENS WHERE id = ?")?;
+    let trouble_delay: i8 = stmt.query_row(params![token_id], |row| row.get(0))?;
+
+    // Only update if trouble_delay is 1
+    if trouble_delay == 1 {
+        conn.execute(
+            "UPDATE TOKENS SET 
+            trouble_delay = 0, 
+            delay_by_second = MAX(0, delay_by_second - 3600) 
+            WHERE id = ?",
+            params![token_id],
+        )?;
+    }
+    
+    Ok(())
 }
