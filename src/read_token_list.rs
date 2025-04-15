@@ -7,6 +7,7 @@ pub struct Token {
     pub token_type: String,
     triggered_on: Option<i64>,
     delay_by_second: i64,
+    pub trouble_delay: i8,
 }
 
 pub fn get_next_token() -> Result<Option<Token>> {
@@ -19,7 +20,7 @@ pub fn get_next_token() -> Result<Option<Token>> {
     // 1. triggered_on is NULL, or
     // 2. triggered_on + delay_by_second is before current time
     let mut stmt = conn.prepare("
-        SELECT id, token, token_type, triggered_on, delay_by_second 
+        SELECT id, token, token_type, triggered_on, delay_by_second, trouble_delay 
         FROM TOKENS 
         WHERE triggered_on IS NULL 
         OR (triggered_on + delay_by_second) < ?
@@ -34,6 +35,7 @@ pub fn get_next_token() -> Result<Option<Token>> {
             token_type: row.get(2)?,
             triggered_on: row.get(3)?,
             delay_by_second: row.get(4)?,
+            trouble_delay: row.get(5)?,
         })
     }).optional()?;
 
