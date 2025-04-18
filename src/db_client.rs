@@ -8,24 +8,63 @@ pub struct Token {
 }
 
 pub fn get_next_token() -> Result<Option<Token>> {
-    let conn = Connection::open("data.db")?;
-    
-    // Get current timestamp
-    let current_time = Utc::now().timestamp();
-    
-    // Select a random token where either:
-    // 1. triggered_on is NULL, or
-    // 2. triggered_on + delay_by_second is before current time
-    let mut stmt = conn.prepare("
-        SELECT id, token, token_type, triggered_on, delay_by_second, trouble_delay 
-        FROM TOKENS 
-        WHERE triggered_on IS NULL 
-        OR (triggered_on + delay_by_second) < ?
-        ORDER BY RANDOM()
-        LIMIT 1
-    ")?;
+    get_next_token_by_llms(None)
+}
 
-    let token = stmt.query_row(params![current_time], |row| {
+/// Get next token, optionally filtered by a list of LLM names (token_type).
+pub fn get_next_token_by_llms(llms: Option<&[&str]>) -> Result<Option<Token>> {
+    let conn = Connection::open("data.db")?;
+    let current_time = Utc::now().timestamp();
+
+    let (sql, params): (String, Vec<rusqlite::types::Value>) = if let Some(llms) = llms {
+        if llms.is_empty() {
+            (
+                "
+                SELECT id, token, token_type, triggered_on, delay_by_second, trouble_delay 
+                FROM TOKENS 
+                WHERE triggered_on IS NULL 
+                OR (triggered_on + delay_by_second) < ?
+                ORDER BY RANDOM()
+                LIMIT 1
+                ".to_string(),
+                vec![current_time.into()],
+            )
+        } else {
+            let placeholders = llms.iter().map(|_| "?".to_string()).collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "
+                SELECT id, token, token_type, triggered_on, delay_by_second, trouble_delay 
+                FROM TOKENS 
+                WHERE (triggered_on IS NULL OR (triggered_on + delay_by_second) < ?)
+                AND token_type IN ({})
+                ORDER BY RANDOM()
+                LIMIT 1
+                ",
+                placeholders
+            );
+            let mut params: Vec<rusqlite::types::Value> = Vec::with_capacity(1 + llms.len());
+            params.push(current_time.into());
+            for llm in llms {
+                params.push(llm.to_string().into());
+            }
+            (sql, params)
+        }
+    } else {
+        (
+            "
+            SELECT id, token, token_type, triggered_on, delay_by_second, trouble_delay 
+            FROM TOKENS 
+            WHERE triggered_on IS NULL 
+            OR (triggered_on + delay_by_second) < ?
+            ORDER BY RANDOM()
+            LIMIT 1
+            ".to_string(),
+            vec![current_time.into()],
+        )
+    };
+
+    let mut stmt = conn.prepare(&sql)?;
+    let token = stmt.query_row(rusqlite::params_from_iter(params.iter()), |row| {
         Ok(Token {
             id: row.get(0)?,
             token: row.get(1)?,
@@ -40,7 +79,7 @@ pub fn get_next_token() -> Result<Option<Token>> {
             params![current_time, token.id],
         )?;
     }
-    
+
     Ok(token)
 }
 

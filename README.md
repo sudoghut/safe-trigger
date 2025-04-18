@@ -1,6 +1,6 @@
 # Safe-Trigger
 
-A Rust-based API server that provides a safe and managed way to interact with Large Language Models (LLM). Currently supports Google's Gemini 2.0 Flash model with built-in token management and rate limiting.
+A Rust-based API server that provides a safe and managed way to interact with Large Language Models (LLM). Currently supports Google's Gemini 2.0 Flash model and OpenRouter API with built-in token management and rate limiting.
 
 ## Features
 
@@ -11,12 +11,13 @@ A Rust-based API server that provides a safe and managed way to interact with La
 - SQLite-based token storage
 - Automatic token rotation and cooldown
 - Built-in error handling and recovery
+- **Supports both Google Gemini and OpenRouter APIs**
 
 ## Prerequisites
 
 - Rust (latest stable version)
 - SQLite3
-- Google Gemini API key(s)
+- Google Gemini API key(s) and/or OpenRouter API key(s)
 
 ## Setup
 
@@ -37,11 +38,15 @@ CREATE TABLE TOKENS (
 );
 ```
 
-3. Add your Gemini API token(s):
+3. Add your Gemini or OpenRouter API token(s):
 ```sql
--- Replace 'your-api-key' with your actual Gemini API key
+-- Replace 'your-gemini-api-key' with your actual Gemini API key
 INSERT INTO TOKENS (token, token_type, delay_by_second) 
-VALUES ('your-api-key', 'gemini', 60);
+VALUES ('your-gemini-api-key', 'gemini', 30);
+
+-- Replace 'your-openrouter-api-key' with your actual OpenRouter API key
+INSERT INTO TOKENS (token, token_type, delay_by_second) 
+VALUES ('your-openrouter-api-key', 'openrouter', 30);
 ```
 
 4. Build and run the project:
@@ -60,7 +65,8 @@ Request body:
 ```json
 {
     "prompt": "Your question or input here",
-    "system_prompt": "System instructions for the model"
+    "system_prompt": "System instructions for the model",
+    "llm": "gemini" // or "openrouter"
 }
 ```
 
@@ -69,10 +75,11 @@ Request body:
 Query parameters:
 - `prompt`: Your question or input
 - `system_prompt`: System instructions for the model
+- `llm`: (optional) "gemini" or "openrouter"
 
 Example:
 ```
-GET /api/chat?prompt=What%20is%20the%20capital%20of%20France?&system_prompt=You%20are%20a%20helpful%20assistant
+GET /api/chat?prompt=What%20is%20the%20capital%20of%20France?&system_prompt=You%20are%20a%20helpful%20assistant&token_type=openrouter
 ```
 
 ### Response Format
@@ -81,7 +88,7 @@ Success response:
 ```json
 {
     "content": "The model's response",
-    "token_type": "gemini"
+    "token_type": "gemini" // or "openrouter"
 }
 ```
 
@@ -106,11 +113,11 @@ pub const RETRY_DELAY_SECONDS: u64 = 30;   // Delay between retries
 Tokens in the database have the following fields:
 - `id`: Unique identifier
 - `token`: The API key
-- `token_type`: Must be "gemini" for Gemini API
+- `token_type`: Must be "gemini" for Gemini API or "openrouter" for OpenRouter API
 - `triggered_on`: Last usage timestamp
 - `delay_by_second`: Cooldown period between uses
 
-The system automatically manages token rotation and respects the cooldown periods.
+The system automatically manages token rotation and respects the cooldown periods for both Gemini and OpenRouter tokens.
 
 ## Error Handling
 
@@ -128,8 +135,8 @@ When an error occurs, the system will:
 
 ## Current Limitations
 
-- Only supports Google's Gemini 2.0 Flash model
-- Token type must be set to "gemini" in the database
+- Only supports Google's Gemini 2.0 Flash model and OpenRouter API
+- Token type must be set to "gemini" or "openrouter" in the database
 - Single server instance (no clustering)
 - Local SQLite database (no distributed setup)
 

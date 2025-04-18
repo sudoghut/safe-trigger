@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use api_client::{LLMClient, GeminiClient, LLMError};
 
-// Define the request structure for both JSON body and query params
 #[derive(Deserialize)]
 struct ChatRequest {
     prompt: String,
     system_prompt: String,
+    llm: Option<String>, // Comma-separated list of LLMs, e.g. "gemini,openrouter"
 }
 
 // Define the response structure
@@ -63,21 +63,50 @@ async fn handle_chat_request(
         })),
     };
 
-    // Get a token from the database
-    let token = match db_client::get_next_token() {
-        Ok(Some(token)) => token,
-        Ok(None) => return Json(Err(ErrorResponse {
-            error: "No available tokens".to_string()
-        })),
-        Err(e) => return Json(Err(ErrorResponse {
-            error: format!("Database error: {}", e)
-        })),
+    // Parse llm parameter as a list of LLMs (token_type)
+    let llm_list: Option<Vec<String>> = request.llm.as_ref().map(|s| {
+        s.split(',')
+            .map(|x| x.trim().to_lowercase())
+            .filter(|x| !x.is_empty())
+            .collect::<Vec<_>>()
+    });
+
+    // Get a token from the database, filtered by llm if provided
+    let token = match &llm_list {
+        Some(llms) if !llms.is_empty() => {
+            let llm_refs: Vec<&str> = llms.iter().map(|s| s.as_str()).collect();
+            match db_client::get_next_token_by_llms(Some(&llm_refs)) {
+                Ok(Some(token)) => token,
+                Ok(None) => return Json(Err(ErrorResponse {
+                    error: "No available tokens for requested LLM(s)".to_string()
+                })),
+                Err(e) => return Json(Err(ErrorResponse {
+                    error: format!("Database error: {}", e)
+                })),
+            }
+        }
+        _ => match db_client::get_next_token() {
+            Ok(Some(token)) => token,
+            Ok(None) => return Json(Err(ErrorResponse {
+                error: "No available tokens".to_string()
+            })),
+            Err(e) => return Json(Err(ErrorResponse {
+                error: format!("Database error: {}", e)
+            })),
+        }
     };
 
     // Create LLM client based on token type
     let response = match token.token_type.as_str() {
         "gemini" => {
             let client = GeminiClient::new(token.token.clone());
+            client.generate_response(&request.prompt, &request.system_prompt, token.id).await
+        },
+        "openrouter" => {
+            // Default model, could be made configurable
+            let model = "deepseek/deepseek-chat-v3-0324:free".to_string();
+            // let model = "shisa-ai/shisa-v2-llama3.3-70b:free".to_string();
+            let client = api_client::OpenRouterClient::new(token.token.clone(), model);
             client.generate_response(&request.prompt, &request.system_prompt, token.id).await
         },
         _ => Err(LLMError("Unsupported token type".to_string())),
