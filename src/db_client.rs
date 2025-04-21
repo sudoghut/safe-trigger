@@ -7,10 +7,6 @@ pub struct Token {
     pub token_type: String,
 }
 
-pub fn get_next_token() -> Result<Option<Token>> {
-    get_next_token_by_llms(None)
-}
-
 /// Get next token, optionally filtered by a list of LLM names (token_type).
 pub fn get_next_token_by_llms(llms: Option<&[&str]>) -> Result<Option<Token>> {
     let conn = Connection::open("data.db")?;
@@ -96,6 +92,20 @@ pub fn mark_token_trouble(token_id: i64) -> Result<()> {
     )?;
     
     Ok(())
+}
+
+// Function to get token details by ID
+pub fn get_token_by_id(token_id: i64) -> Result<Option<Token>> {
+    let conn = Connection::open("data.db")?;
+    let mut stmt = conn.prepare("SELECT id, token, token_type FROM TOKENS WHERE id = ?")?;
+    let token = stmt.query_row(params![token_id], |row| {
+        Ok(Token {
+            id: row.get(0)?,
+            token: row.get(1)?,
+            token_type: row.get(2)?,
+        })
+    }).optional()?;
+    Ok(token)
 }
 
 pub fn clear_token_trouble(token_id: i64) -> Result<()> {

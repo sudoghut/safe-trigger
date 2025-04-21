@@ -12,3 +12,4 @@ rusqlite = { version = "0.29.0", features = ["bundled"] }
 chrono = "0.4"
 reqwest = { version = "0.11", features = ["json"] }
 async-trait = "0.1"
+regex = "1" # Added for parsing error messages in main.rs
