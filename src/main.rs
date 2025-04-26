@@ -119,8 +119,20 @@ async fn handle_chat_request(
                 client.generate_response(&request.prompt, &request.system_prompt, current_token.id, &log_client, llm_conditions_slice).await
             },
             unsupported_type => {
-                 println!("Encountered unsupported token type: {}", unsupported_type);
-                 Err(LLMError(format!("Unsupported token type '{}' for token ID {}", unsupported_type, current_token.id)))
+                println!("Encountered unsupported token type: {}", unsupported_type);
+                let error_msg = format!("Unsupported token type '{}' for token ID {}", unsupported_type, current_token.id);
+                
+                if let Err(log_err) = log_client.insert_log(
+                    &request.system_prompt,
+                    &request.prompt,
+                    &error_msg,
+                    &current_token.token,
+                    &current_token.token_type,
+                ) {
+                    println!("Failed to log error: {}", log_err);
+                }
+                
+                Err(LLMError(error_msg))
             }
         };
 

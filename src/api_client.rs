@@ -1,7 +1,6 @@
 use crate::db_client;
 use crate::log_client;
 use serde_json::{json, Value};
-use std::error::Error as StdError;
 use std::fmt;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -13,33 +12,6 @@ pub struct LLMError(pub String);
 impl fmt::Display for LLMError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl StdError for LLMError {}
-
-impl From<reqwest::Error> for LLMError {
-    fn from(err: reqwest::Error) -> Self {
-        LLMError(err.to_string())
-    }
-}
-
-impl From<&str> for LLMError {
-    fn from(s: &str) -> Self {
-        LLMError(s.to_string())
-    }
-}
-
-impl From<String> for LLMError {
-    fn from(s: String) -> Self {
-        LLMError(s)
-    }
-}
-
-// Add conversion from rusqlite::Error
-impl From<rusqlite::Error> for LLMError {
-    fn from(err: rusqlite::Error) -> Self {
-        LLMError(format!("Database error: {}", err))
     }
 }
 
@@ -75,7 +47,7 @@ impl OpenRouterClient {
         Self { api_key, model }
     }
 
-    async fn attempt_generate(&self, prompt: &str, system_prompt: &str) -> Result<String, LLMError> {
+    async fn attempt_generate(&self, prompt: &str, system_prompt: &str) -> AttemptResult {
         let request_body = json!({
             "model": self.model,
             "messages": [
@@ -92,40 +64,40 @@ impl OpenRouterClient {
 
         let api_url = "https://openrouter.ai/api/v1/chat/completions";
         let client = reqwest::Client::new();
-        let response = client
-            .post(api_url)
-            .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| LLMError(e.to_string()))?;
-
-        if response.status().is_success() {
-            let response_json: Value = response.json()
+        
+        let result = async {
+            let response = client
+                .post(api_url)
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .json(&request_body)
+                .send()
                 .await
                 .map_err(|e| LLMError(e.to_string()))?;
-            if let Some(choices) = response_json.get("choices") {
-                if let Some(choice) = choices.get(0) {
-                    if let Some(message) = choice.get("message") {
-                        if let Some(content) = message.get("content") {
-                            if let Some(text) = content.as_str() {
-                                return Ok(text.to_string());
+
+            if response.status().is_success() {
+                let response_json: Value = response.json()
+                    .await
+                    .map_err(|e| LLMError(e.to_string()))?;
+                if let Some(choices) = response_json.get("choices") {
+                    if let Some(choice) = choices.get(0) {
+                        if let Some(message) = choice.get("message") {
+                            if let Some(content) = message.get("content") {
+                                if let Some(text) = content.as_str() {
+                                    return Ok(text.to_string());
+                                }
                             }
                         }
                     }
                 }
+                Err(LLMError("Failed to parse OpenRouter response".to_string()))
+            } else {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_else(|e| e.to_string());
+                Err(LLMError(format!("Error: {} - {}", status, error_text)))
             }
-            Err(LLMError("Failed to parse OpenRouter response".to_string()))
-        } else {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|e| e.to_string());
-            Err(LLMError(format!("Error: {} - {}", status, error_text)))
-        }
-    }
-
-    async fn attempt_with_token(&self, prompt: &str, system_prompt: &str) -> AttemptResult {
-        let result = self.attempt_generate(prompt, system_prompt).await;
+        }.await;
+        
         AttemptResult { result }
     }
 }
@@ -162,6 +134,29 @@ async fn handle_retry(
         eprintln!("CRITICAL WARNING: FAILED TO LOG ERROR TO DATABASE (data.db): {}", log_err);
     }
 
+    // Check if token is already marked as "in trouble"
+    match db_client::is_token_in_trouble(current_token_id) {
+        Ok(true) => {
+            // Already troubled, so clear it first
+            if let Err(clear_err) = db_client::clear_token_trouble(current_token_id) {
+                println!(
+                    "Warning: Failed to clear trouble status for token {}: {}", 
+                    current_token_id, clear_err
+                );
+            }
+        },
+        Ok(false) => {
+            // Not troubled, continue to mark as troubled
+        },
+        Err(check_err) => {
+            println!(
+                "Warning: Failed to check trouble status for token {}: {}", 
+                current_token_id, check_err
+            );
+        }
+    }
+
+    // Then mark as troubled in all cases
     if let Err(db_err) = db_client::mark_token_trouble(current_token_id) {
         println!("Warning: Failed to mark token {} as troubled: {}", current_token_id, db_err);
     }
@@ -204,7 +199,7 @@ impl LLMClient for OpenRouterClient {
         let mut current_token_id = initial_token_id;
 
         let initial_token_details = db_client::get_token_by_id(current_token_id)
-            .map_err(LLMError::from)?
+            .map_err(|e| LLMError(e.to_string()))?
             .ok_or_else(|| LLMError(format!("Initial token ID {} not found", current_token_id)))?;
 
         if initial_token_details.token_type != "openrouter" {
@@ -219,7 +214,7 @@ impl LLMClient for OpenRouterClient {
         let mut current_token_value = initial_token_details.token.clone();
 
         loop {
-            let attempt_result = current_client.attempt_with_token(prompt, system_prompt).await;
+            let attempt_result = current_client.attempt_generate(prompt, system_prompt).await;
 
             match attempt_result.result {
                 Ok(response) => {
@@ -280,7 +275,7 @@ impl GeminiClient {
         Self { api_key }
     }
 
-    async fn attempt_generate(&self, prompt: &str, system_prompt: &str) -> Result<String, LLMError> {
+    async fn attempt_generate(&self, prompt: &str, system_prompt: &str) -> AttemptResult {
         let model_id = "gemini-1.5-flash"; // Corrected model ID if needed, or keep as 2.0
         let generate_content_api = "generateContent"; // Use generateContent for non-streaming
 
@@ -305,47 +300,45 @@ impl GeminiClient {
         );
 
         let client = reqwest::Client::new();
-        let response = client
-            .post(&api_url)
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| LLMError(e.to_string()))?;
-
-        if response.status().is_success() {
-            let response_json: Value = response.json()
+        
+        let result = async {
+            let response = client
+                .post(&api_url)
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .send()
                 .await
-                .map_err(|e| LLMError(format!("Failed to parse JSON response: {}", e)))?;
+                .map_err(|e| LLMError(e.to_string()))?;
 
-            // Adjusted parsing for non-streaming generateContent response
-            if let Some(candidates) = response_json.get("candidates") {
-                 if let Some(candidate) = candidates.get(0) {
-                     if let Some(content) = candidate.get("content") {
-                         if let Some(parts) = content.get("parts") {
-                             if let Some(part) = parts.get(0) {
-                                 if let Some(text) = part.get("text") {
-                                     if let Some(text_str) = text.as_str() {
-                                         return Ok(text_str.to_string());
+            if response.status().is_success() {
+                let response_json: Value = response.json()
+                    .await
+                    .map_err(|e| LLMError(format!("Failed to parse JSON response: {}", e)))?;
+
+                // Adjusted parsing for non-streaming generateContent response
+                if let Some(candidates) = response_json.get("candidates") {
+                     if let Some(candidate) = candidates.get(0) {
+                         if let Some(content) = candidate.get("content") {
+                             if let Some(parts) = content.get("parts") {
+                                 if let Some(part) = parts.get(0) {
+                                     if let Some(text) = part.get("text") {
+                                         if let Some(text_str) = text.as_str() {
+                                             return Ok(text_str.to_string());
+                                         }
                                      }
                                  }
                              }
                          }
                      }
-                 }
+                }
+                Err(LLMError(format!("Failed to extract text from Gemini response: {:?}", response_json)))
+            } else {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_else(|e| e.to_string());
+                Err(LLMError(format!("Error: {} - {}", status, error_text)))
             }
-             Err(LLMError(format!("Failed to extract text from Gemini response: {:?}", response_json)))
-
-        } else {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|e| e.to_string());
-            Err(LLMError(format!("Error: {} - {}", status, error_text)))
-        }
-    }
-
-
-    async fn attempt_with_token(&self, prompt: &str, system_prompt: &str) -> AttemptResult {
-        let result = self.attempt_generate(prompt, system_prompt).await;
+        }.await;
+        
         AttemptResult { result }
     }
 }
@@ -364,7 +357,7 @@ impl LLMClient for GeminiClient {
         let mut current_token_id = initial_token_id;
 
         let initial_token_details = db_client::get_token_by_id(current_token_id)
-            .map_err(LLMError::from)?
+            .map_err(|e| LLMError(e.to_string()))?
             .ok_or_else(|| LLMError(format!("Initial token ID {} not found", current_token_id)))?;
 
         if initial_token_details.token_type != "gemini" {
@@ -379,7 +372,7 @@ impl LLMClient for GeminiClient {
         let mut current_token_value = initial_token_details.token.clone();
 
         loop {
-            let attempt_result = current_client.attempt_with_token(prompt, system_prompt).await;
+            let attempt_result = current_client.attempt_generate(prompt, system_prompt).await;
 
             match attempt_result.result {
                 Ok(response) => {

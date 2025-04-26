@@ -108,6 +108,23 @@ pub fn get_token_by_id(token_id: i64) -> Result<Option<Token>> {
     Ok(token)
 }
 
+// Function to check if a token is marked as in trouble
+pub fn is_token_in_trouble(token_id: i64) -> Result<bool> {
+    let conn = Connection::open("data.db")?;
+    let mut stmt = conn.prepare("SELECT trouble_delay FROM TOKENS WHERE id = ?")?;
+    
+    let result = stmt.query_row(params![token_id], |row| {
+        let trouble_delay: i8 = row.get(0)?; // Assuming trouble_delay is stored as INTEGER (compatible with i8)
+        Ok(trouble_delay == 1)
+    });
+
+    match result {
+        Ok(is_troubled) => Ok(is_troubled),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false), // Token not found is not considered "in trouble"
+        Err(e) => Err(e), // Propagate other database errors
+    }
+}
+
 pub fn clear_token_trouble(token_id: i64) -> Result<()> {
     let conn = Connection::open("data.db")?;
 
