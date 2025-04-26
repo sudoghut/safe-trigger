@@ -75,17 +75,14 @@ async fn handle_chat_request(
     };
 
     // Parse llm parameter
-    let llm_list: Option<Vec<String>> = request.llm.as_ref().map(|s| {
+    let llm_conditions_vec: Option<Vec<&str>> = request.llm.as_ref().map(|s| {
         s.split(',')
-            .map(|x| x.trim().to_lowercase())
+            .map(|x| x.trim())
             .filter(|x| !x.is_empty())
-            .collect::<Vec<_>>()
+            .collect()
     });
-
-    let llm_conditions_vec: Option<Vec<&str>> = llm_list.as_ref().map(|llms| {
-        llms.iter().map(|s| s.as_str()).collect()
-    });
-    let llm_conditions_slice: Option<&[&str]> = llm_conditions_vec.as_deref();
+    
+    let llm_conditions_slice = llm_conditions_vec.as_deref();
 
     // Get the initial token
     let mut current_token = match db_client::get_next_token_by_llms(llm_conditions_slice) {
