@@ -4,9 +4,6 @@ FROM rust:latest AS builder
 # Set the working directory
 WORKDIR /usr/src/safe-trigger
 
-# Copy the data.db file
-COPY data.db ./data.db
-
 # Copy the Cargo.toml and Cargo.lock files
 COPY Cargo.toml Cargo.lock ./
 
@@ -24,9 +21,6 @@ WORKDIR /usr/local/bin
 
 # Copy the compiled binary from the builder stage
 COPY --from=builder /usr/src/safe-trigger/target/release/safe-trigger .
-
-# Copy the data.db file from the builder stage
-COPY --from=builder /usr/src/safe-trigger/data.db .
 
 # Expose the port the application listens on (assuming default Axum port 3000, adjust if needed)
 EXPOSE 3000

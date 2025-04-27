@@ -133,6 +133,20 @@ When an error occurs, the system will:
 2. Wait RETRY_DELAY_SECONDS between attempts
 3. Return a descriptive error message if all retries fail
 
+## Docker deployment
+
+1. Rename _data.db to data.db
+
+2. Create image
+```
+docker build -t safe-trigger-app .
+```
+
+3. Create container
+```
+docker run -d -p 3000:3000 --name safe-trigger --restart unless-stopped -v "$(pwd)/data.db:/usr/local/bin/data.db" safe-trigger-app
+```
+
 ## Current Limitations
 
 - Only supports Google's Gemini 2.0 Flash model and OpenRouter API
