@@ -22,6 +22,40 @@ A Rust-based API server that provides a safe and managed way to interact with La
 ## Setup
 
 1. Clone the repository:
+
+## Building with Fedora in Docker (on Windows)
+
+You can build the project using Fedora in Docker on Windows. This ensures a consistent build environment.
+
+1. Build the Docker image:
+   ```bash
+   docker build -t safe-trigger-fedora .
+   ```
+
+2. Create a container from the image (but do not start it):
+   ```bash
+   docker create --name safe-trigger-fedora-container safe-trigger-fedora
+   ```
+
+3. Copy the built binary from the container to your host (replace `<binary-name>` with your actual binary name, e.g., `safe-trigger`):
+   ```bash
+   docker cp safe-trigger-fedora-container:/app/target/release/safe-trigger .
+   ```
+
+4. (Optional) Remove the container after copying:
+   ```bash
+   docker rm safe-trigger-fedora-container
+   ```
+
+This process will give you the release binary built in a Fedora environment, ready to use on your system.
+
+5. After running the binary, you can test the API using tools like Postman or curl.
+    ```bash
+    curl -v -X POST "http://localhost:3000/api/chat" \
+        -H "Content-Type: application/json" \
+        -d '{"prompt": "中国的首都是哪里", "system_prompt": "你是一个好用的大语言模型"}'
+     ```
+
 ```bash
 git clone https://github.com/yourusername/safe-trigger.git
 cd safe-trigger
@@ -132,20 +166,6 @@ When an error occurs, the system will:
 1. Automatically retry (up to MAX_RETRY_ATTEMPTS)
 2. Wait RETRY_DELAY_SECONDS between attempts
 3. Return a descriptive error message if all retries fail
-
-## Docker deployment
-
-1. Rename _data.db to data.db
-
-2. Create image
-```
-sudo docker build -t safe-trigger-app .
-```
-
-3. Create container
-```
-sudo docker run -d -p 3000:3000 --name safe-trigger --restart unless-stopped -v "$(pwd)/data.db:/usr/local/bin/data.db" safe-trigger-app
-```
 
 ## Current Limitations
 

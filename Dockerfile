@@ -1,35 +1,17 @@
-# Use the official Rust image as a base
-FROM rust:latest AS builder
+# Use Fedora as the build environment
+FROM fedora:latest
 
-# Set the working directory
-WORKDIR /usr/src/safe-trigger
+# Install Rust and build tools
+RUN dnf update -y && \
+    dnf install -y rust cargo gcc make openssl-devel
 
-# Copy the Cargo.toml and Cargo.lock files
-COPY Cargo.toml Cargo.lock ./
+# Set workdir
+WORKDIR /app
 
-# Copy the source code
-COPY src ./src
+# Copy project files
+COPY . .
 
-# Add the musl target for Alpine compatibility
-RUN rustup target add x86_64-unknown-linux-musl
+# Build the release binary
+RUN cargo build --release
 
-# Build the project in release mode for the musl target
-RUN cargo build --target x86_64-unknown-linux-musl --release
-
-# Use Alpine Linux for the final stage
-FROM alpine:latest
-
-# Set the working directory
-WORKDIR /usr/local/bin
-
-# Install runtime dependencies for Alpine (OpenSSL 3 and certificates)
-RUN apk add --no-cache openssl3 ca-certificates
-
-# Copy the compiled musl binary from the builder stage
-COPY --from=builder /usr/src/safe-trigger/target/x86_64-unknown-linux-musl/release/safe-trigger .
-
-# Expose the port the application listens on (assuming default Axum port 3000, adjust if needed)
-EXPOSE 3000
-
-# Command to run the application
-CMD ["./safe-trigger"]
+# The resulting binary will be at /app/target/release/

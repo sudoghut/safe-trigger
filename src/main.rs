@@ -198,7 +198,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(state);
 
     // Set up the server address
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    // let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("Server listening on {}", addr);
     println!("POST to /api/chat with JSON body {{ \"prompt\": \"...\", \"system_prompt\": \"...\", \"llm\": \"optional,comma,separated\" }}");
     println!("GET from /api/chat?prompt=...&system_prompt=...&llm=optional,comma,separated");
