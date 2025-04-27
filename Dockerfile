@@ -22,6 +22,9 @@ WORKDIR /usr/local/bin
 # Copy the compiled binary from the builder stage
 COPY --from=builder /usr/src/safe-trigger/target/release/safe-trigger .
 
+# Install required runtime dependencies (like OpenSSL)
+RUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+
 # Expose the port the application listens on (assuming default Axum port 3000, adjust if needed)
 EXPOSE 3000
 
