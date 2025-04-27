@@ -139,12 +139,12 @@ When an error occurs, the system will:
 
 2. Create image
 ```
-docker build -t safe-trigger-app .
+sudo docker build -t safe-trigger-app .
 ```
 
 3. Create container
 ```
-docker run -d -p 3000:3000 --name safe-trigger --restart unless-stopped -v "$(pwd)/data.db:/usr/local/bin/data.db" safe-trigger-app
+sudo docker run -d -p 3000:3000 --name safe-trigger --restart unless-stopped -v "$(pwd)/data.db:/usr/local/bin/data.db" safe-trigger-app
 ```
 
 ## Current Limitations
