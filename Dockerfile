@@ -10,17 +10,23 @@ COPY Cargo.toml Cargo.lock ./
 # Copy the source code
 COPY src ./src
 
-# Build the project in release mode
-RUN cargo build --release
+# Add the musl target for Alpine compatibility
+RUN rustup target add x86_64-unknown-linux-musl
 
-# Use a minimal image for the final stage (Bookworm includes libssl3)
-FROM debian:bookworm-slim
+# Build the project in release mode for the musl target
+RUN cargo build --target x86_64-unknown-linux-musl --release
+
+# Use Alpine Linux for the final stage
+FROM alpine:latest
 
 # Set the working directory
 WORKDIR /usr/local/bin
 
-# Copy the compiled binary from the builder stage
-COPY --from=builder /usr/src/safe-trigger/target/release/safe-trigger .
+# Install runtime dependencies for Alpine (OpenSSL 3 and certificates)
+RUN apk add --no-cache openssl3 ca-certificates
+
+# Copy the compiled musl binary from the builder stage
+COPY --from=builder /usr/src/safe-trigger/target/x86_64-unknown-linux-musl/release/safe-trigger .
 
 # Expose the port the application listens on (assuming default Axum port 3000, adjust if needed)
 EXPOSE 3000
