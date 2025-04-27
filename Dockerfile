@@ -13,17 +13,14 @@ COPY src ./src
 # Build the project in release mode
 RUN cargo build --release
 
-# Use a minimal image for the final stage
-FROM debian:bullseye-slim
+# Use a minimal image for the final stage (Bookworm includes libssl3)
+FROM debian:bookworm-slim
 
 # Set the working directory
 WORKDIR /usr/local/bin
 
 # Copy the compiled binary from the builder stage
 COPY --from=builder /usr/src/safe-trigger/target/release/safe-trigger .
-
-# Install required runtime dependencies (like OpenSSL)
-RUN apt-get update && apt-get install -y libssl1.1 ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Expose the port the application listens on (assuming default Axum port 3000, adjust if needed)
 EXPOSE 3000
