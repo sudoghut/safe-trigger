@@ -93,7 +93,7 @@ To run `safe-trigger` as a background service managed by `systemd` on Fedora:
     *   Decide which user and group the service should run as. It's recommended to create a dedicated user (e.g., `safe-trigger-user`) for security rather than running as root.
 
 2.  **Create a systemd Unit File:**
-    Create a file named `safe-trigger.service` in `/etc/systemd/system/` with the following content. **Replace the placeholder values** (`your_user`, `your_group`, `/path/to/safe-trigger`) with your actual settings.
+    Create a file named `safe-trigger.service` in `/etc/systemd/system/` with the following content. **Change the following values** for your actual settings.
 
     ```ini
     [Unit]
@@ -101,12 +101,11 @@ To run `safe-trigger` as a background service managed by `systemd` on Fedora:
     After=network.target
 
     [Service]
-    User=your_user
-    Group=your_group
-    WorkingDirectory=/path/to/safe-trigger
-    ExecStart=/path/to/safe-trigger/target/release/safe-trigger
+    User=linuxuser
+    Group=linuxuser
+    WorkingDirectory=/home/linuxuser/safe-trigger
+    ExecStart=/usr/bin/env /home/linuxuser/safe-trigger/safe-trigger
     Restart=on-failure
-    # Optional: Redirect output to journald
     StandardOutput=journal
     StandardError=journal
 
