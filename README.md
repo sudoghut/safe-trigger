@@ -82,6 +82,59 @@ You can build a release binary within a Fedora Docker container:
 
 Now you have the `safe-trigger` binary built in the container, ready to run on a compatible system.
 
+## Running as a Systemd Service (Fedora)
+
+To run `safe-trigger` as a background service managed by `systemd` on Fedora:
+
+1.  **Prerequisites:**
+    *   Ensure you have built the release binary (`./target/release/safe-trigger`).
+    *   Place the `safe-trigger` project directory (containing the binary, `data.db`, `access_token.txt`, etc.) in a stable location (e.g., `/opt/safe-trigger` or `/srv/safe-trigger`). Avoid using user home directories if the service needs to run system-wide or survive user logouts.
+    *   Decide which user and group the service should run as. It's recommended to create a dedicated user (e.g., `safe-trigger-user`) for security rather than running as root.
+
+2.  **Create a systemd Unit File:**
+    Create a file named `safe-trigger.service` in `/etc/systemd/system/` with the following content. **Replace the placeholder values** (`your_user`, `your_group`, `/path/to/safe-trigger`) with your actual settings.
+
+    ```ini
+    [Unit]
+    Description=Safe-Trigger LLM API Server
+    After=network.target
+
+    [Service]
+    User=your_user
+    Group=your_group
+    WorkingDirectory=/path/to/safe-trigger
+    ExecStart=/path/to/safe-trigger/target/release/safe-trigger
+    Restart=on-failure
+    # Optional: Redirect output to journald
+    StandardOutput=journal
+    StandardError=journal
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+    *   `User`/`Group`: The user/group the service will run under. Ensure this user has read/write permissions for the `WorkingDirectory`, `data.db`, and `access_token.txt`.
+    *   `WorkingDirectory`: The absolute path to the directory where you placed the `safe-trigger` project.
+    *   `ExecStart`: The absolute path to the compiled `safe-trigger` binary.
+
+3.  **Enable and Start the Service:**
+    ```bash
+    # Reload systemd to recognize the new service file
+    sudo systemctl daemon-reload
+
+    # Enable the service to start on boot
+    sudo systemctl enable safe-trigger.service
+
+    # Start the service immediately
+    sudo systemctl start safe-trigger.service
+    ```
+
+4.  **Manage the Service:**
+    *   **Check Status:** `sudo systemctl status safe-trigger.service`
+    *   **Stop Service:** `sudo systemctl stop safe-trigger.service`
+    *   **Restart Service:** `sudo systemctl restart safe-trigger.service`
+    *   **View Logs (if using journald):** `sudo journalctl -u safe-trigger.service -f` (Use `-f` to follow logs)
+
 ## API Usage
 
 Endpoint: `/api/chat` (Accepts GET and POST)
