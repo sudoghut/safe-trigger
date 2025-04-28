@@ -88,6 +88,7 @@ To run `safe-trigger` as a background service managed by `systemd` on Fedora:
 
 1.  **Prerequisites:**
     *   Ensure you have built the release binary (`./target/release/safe-trigger`).
+    *   Make the binary executable: `sudo chmod +x ./target/release/safe-trigger`
     *   Place the `safe-trigger` project directory (containing the binary, `data.db`, `access_token.txt`, etc.) in a stable location (e.g., `/opt/safe-trigger` or `/srv/safe-trigger`). Avoid using user home directories if the service needs to run system-wide or survive user logouts.
     *   Decide which user and group the service should run as. It's recommended to create a dedicated user (e.g., `safe-trigger-user`) for security rather than running as root.
 
