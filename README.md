@@ -1,183 +1,161 @@
 # Safe-Trigger
 
-A Rust-based API server that provides a safe and managed way to interact with Large Language Models (LLM). Currently supports Google's Gemini 2.0 Flash model and OpenRouter API with built-in token management and rate limiting.
+A Rust-based API server providing managed access to Large Language Models (LLMs) like Google Gemini and OpenRouter. It features built-in token management, rate limiting, and automatic retries.
 
 ## Features
 
-- Token-based API access management
-- Automatic rate limiting
-- Configurable retry mechanism
-- Support for both GET and POST requests
-- SQLite-based token storage
-- Automatic token rotation and cooldown
-- Built-in error handling and recovery
-- **Supports both Google Gemini and OpenRouter APIs**
+-   **LLM Support:** Google Gemini and OpenRouter.
+-   **Token Management:** Rotates LLM API keys stored in an SQLite database, respecting cooldown periods.
+-   **Rate Limiting:** Prevents exceeding API limits through token cooldowns.
+-   **Retry Mechanism:** Automatically retries failed API calls.
+-   **Access Control:** Optional server-level access token for added security.
+-   **API Interface:** Supports both GET and POST requests to `/api/chat`.
+-   **Error Handling:** Gracefully handles API errors, network issues, and database problems.
 
 ## Prerequisites
 
-- Rust (latest stable version)
-- SQLite3
-- Google Gemini API key(s) and/or OpenRouter API key(s)
+-   Rust (latest stable version recommended)
+-   SQLite3
+-   API Keys: Google Gemini and/or OpenRouter API keys.
 
-## Setup
+## Setup & Running
 
-1. Clone the repository:
-
-## Building with Fedora in Docker (on Windows)
-
-You can build the project using Fedora in Docker on Windows. This ensures a consistent build environment.
-
-1. Build the Docker image:
-   ```bash
-   docker build -t safe-trigger-fedora .
-   ```
-
-2. Create a container from the image (but do not start it):
-   ```bash
-   docker create --name safe-trigger-fedora-container safe-trigger-fedora
-   ```
-
-3. Copy the built binary from the container to your host (replace `<binary-name>` with your actual binary name, e.g., `safe-trigger`):
-   ```bash
-   docker cp safe-trigger-fedora-container:/app/target/release/safe-trigger .
-   ```
-
-4. (Optional) Remove the container after copying:
-   ```bash
-   docker rm safe-trigger-fedora-container
-   ```
-
-This process will give you the release binary built in a Fedora environment, ready to use on your system.
-
-5. After running the binary, you can test the API using tools like Postman or curl.
+1.  **Clone the Repository:**
     ```bash
-    curl -v -X POST "http://localhost:3000/api/chat" \
-        -H "Content-Type: application/json" \
-        -d '{"prompt": "中国的首都是哪里", "system_prompt": "你是一个好用的大语言模型"}'
-     ```
+    git clone https://github.com/yourusername/safe-trigger.git # Replace with your repo URL if forked
+    cd safe-trigger
+    ```
 
-```bash
-git clone https://github.com/yourusername/safe-trigger.git
-cd safe-trigger
-```
+2.  **Initialize Database:**
+    Create an SQLite database file (e.g., `data.db`) and run the following SQL command to create the necessary table:
+    ```sql
+    -- Using sqlite3 command-line tool:
+    -- sqlite3 data.db < schema.sql
+    -- Or manually:
+    CREATE TABLE TOKENS (
+        id INTEGER PRIMARY KEY,
+        token TEXT NOT NULL,          -- The LLM API Key
+        token_type TEXT NOT NULL,     -- 'gemini' or 'openrouter'
+        triggered_on INTEGER,         -- Timestamp of last use (Unix epoch)
+        delay_by_second INTEGER NOT NULL -- Cooldown period in seconds
+    );
+    ```
+    *(Note: `data.db` is ignored by default in `.gitignore`)*
 
-2. Create the SQLite database and table:
-```sql
-CREATE TABLE TOKENS (
-    id INTEGER PRIMARY KEY,
-    token TEXT NOT NULL,
-    token_type TEXT NOT NULL,
-    triggered_on INTEGER,
-    delay_by_second INTEGER NOT NULL
-);
-```
+3.  **Add LLM API Keys:**
+    Insert your API keys into the `TOKENS` table. Set `token_type` to either `gemini` or `openrouter` and specify a `delay_by_second` cooldown (e.g., 30 seconds).
+    ```sql
+    -- Example for Gemini:
+    INSERT INTO TOKENS (token, token_type, delay_by_second)
+    VALUES ('YOUR_GEMINI_API_KEY', 'gemini', 30);
 
-3. Add your Gemini or OpenRouter API token(s):
-```sql
--- Replace 'your-gemini-api-key' with your actual Gemini API key
-INSERT INTO TOKENS (token, token_type, delay_by_second) 
-VALUES ('your-gemini-api-key', 'gemini', 30);
+    -- Example for OpenRouter:
+    INSERT INTO TOKENS (token, token_type, delay_by_second)
+    VALUES ('YOUR_OPENROUTER_API_KEY', 'openrouter', 30);
+    ```
 
--- Replace 'your-openrouter-api-key' with your actual OpenRouter API key
-INSERT INTO TOKENS (token, token_type, delay_by_second) 
-VALUES ('your-openrouter-api-key', 'openrouter', 30);
-```
+4.  **Configure Server Access Token (Optional):**
+    For an extra layer of security (to control who can use *this server*), you can set a server access token:
+    a.  Rename `_access_token.txt` to `access_token.txt`.
+    b.  Edit `access_token.txt` and place your desired secret token (password) on the first line.
+    c.  If this file contains a token, all API requests must include a matching `access_token` parameter/field (see API Usage).
+    d.  If `access_token.txt` is empty or doesn't exist, this check is skipped.
+    *(Note: `access_token.txt` is ignored by default in `.gitignore`)*
 
-4. Build and run the project:
-```bash
-cargo build
-cargo run
-```
+5.  **Build and Run:**
+    ```bash
+    cargo build --release
+    ./target/release/safe-trigger
+    # Or using cargo run (for development):
+    # cargo run
+    ```
+    The server will start listening on `0.0.0.0:3000`.
+
+## Building with Docker (Alternative)
+
+You can build a release binary within a Fedora Docker container:
+
+1.  **Build Image:** `docker build -t safe-trigger-fedora .`
+2.  **Create Container:** `docker create --name safe-trigger-fedora-container safe-trigger-fedora`
+3.  **Copy Binary:** `docker cp safe-trigger-fedora-container:/app/target/release/safe-trigger .`
+4.  **Cleanup (Optional):** `docker rm safe-trigger-fedora-container`
+
+Now you have the `safe-trigger` binary built in the container, ready to run on a compatible system.
 
 ## API Usage
 
-The server runs on `http://localhost:3000` and provides the following endpoint:
+Endpoint: `/api/chat` (Accepts GET and POST)
+Server Address: `http://localhost:3000` (or your server's address)
 
-### POST /api/chat
+### Request Parameters/Body
 
-Request body:
-```json
-{
-    "prompt": "Your question or input here",
-    "system_prompt": "System instructions for the model",
-    "llm": "gemini" // or "openrouter"
-}
+| Field           | Type     | Required | Description                                                                 |
+| --------------- | -------- | -------- | --------------------------------------------------------------------------- |
+| `prompt`        | `string` | Yes      | Your question or input for the LLM.                                         |
+| `system_prompt` | `string` | Yes      | System instructions for the LLM (e.g., "You are a helpful assistant.").     |
+| `llm`           | `string` | No       | Specify LLM type: "gemini" or "openrouter". If omitted, uses any available. |
+| `access_token`  | `string` | Optional | Required only if configured in `access_token.txt`.                          |
+
+### Examples
+
+**POST Request (using curl):**
+
+```bash
+curl -X POST "http://localhost:3000/api/chat" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "prompt": "What is the capital of France?",
+           "system_prompt": "Respond concisely.",
+           "llm": "openrouter",
+           "access_token": "YOUR_SERVER_ACCESS_TOKEN"
+         }'
 ```
 
-### GET /api/chat
+**GET Request (URL):**
 
-Query parameters:
-- `prompt`: Your question or input
-- `system_prompt`: System instructions for the model
-- `llm`: (optional) "gemini" or "openrouter"
-
-Example:
 ```
-GET /api/chat?prompt=What%20is%20the%20capital%20of%20France?&system_prompt=You%20are%20a%20helpful%20assistant&token_type=openrouter
+http://localhost:3000/api/chat?prompt=What%20is%20Rust%3F&system_prompt=Explain%20like%20I%27m%20five.&access_token=YOUR_SERVER_ACCESS_TOKEN
 ```
 
 ### Response Format
 
-Success response:
+**Success (200 OK):**
+
 ```json
 {
-    "content": "The model's response",
-    "token_type": "gemini" // or "openrouter"
+    "content": "The model's response text...",
+    "token_type": "gemini" // or "openrouter" (Indicates which token type was used)
 }
 ```
 
-Error response:
+**Error (e.g., 400 Bad Request, 401 Unauthorized, 500 Internal Server Error):**
+
 ```json
 {
-    "error": "Error message describing what went wrong"
+    "error": "A message describing the error (e.g., Invalid access token, No available tokens, API error details...)"
 }
 ```
 
 ## Configuration
 
-The following constants can be adjusted in `src/api_client.rs`:
+Retry behavior can be adjusted in `src/api_client.rs`:
 
 ```rust
-pub const MAX_RETRY_ATTEMPTS: u32 = 10;    // Maximum number of retry attempts
+pub const MAX_RETRY_ATTEMPTS: u32 = 10;    // Max retry attempts per request
 pub const RETRY_DELAY_SECONDS: u64 = 30;   // Delay between retries
 ```
 
-## Token Management
-
-Tokens in the database have the following fields:
-- `id`: Unique identifier
-- `token`: The API key
-- `token_type`: Must be "gemini" for Gemini API or "openrouter" for OpenRouter API
-- `triggered_on`: Last usage timestamp
-- `delay_by_second`: Cooldown period between uses
-
-The system automatically manages token rotation and respects the cooldown periods for both Gemini and OpenRouter tokens.
-
-## Error Handling
-
-The system includes comprehensive error handling for:
-- API rate limits
-- Network issues
-- Invalid tokens
-- Malformed requests
-- Database errors
-
-When an error occurs, the system will:
-1. Automatically retry (up to MAX_RETRY_ATTEMPTS)
-2. Wait RETRY_DELAY_SECONDS between attempts
-3. Return a descriptive error message if all retries fail
-
 ## Current Limitations
 
-- Only supports Google's Gemini 2.0 Flash model and OpenRouter API
-- Token type must be set to "gemini" or "openrouter" in the database
-- Single server instance (no clustering)
-- Local SQLite database (no distributed setup)
+-   Supports only Google Gemini and OpenRouter via specific client implementations.
+-   Token management relies on a local SQLite database.
+-   Basic retry and cooldown logic.
+-   Single-instance deployment.
 
 ## Future Plans
 
-- Support for additional LLM providers
-- Distributed token management
-- Enhanced rate limiting strategies
-- Request caching
-- Response streaming
+-   Support for more LLM providers.
+-   More sophisticated rate limiting and token management.
+-   Request caching.
+-   Response streaming.
+-   Distributed deployment options.

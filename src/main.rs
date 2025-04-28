@@ -8,7 +8,7 @@ use axum::{
     Router,
 };
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, fs}; // Added fs and io
 use api_client::{LLMClient, GeminiClient, OpenRouterClient, LLMError}; // Added OpenRouterClient here
 use regex::Regex; // Import Regex
 
@@ -17,6 +17,7 @@ struct ChatRequest {
     prompt: String,
     system_prompt: String,
     llm: Option<String>, // Comma-separated list of LLMs, e.g. "gemini,openrouter"
+    access_token: Option<String>, // Added access token field
 }
 
 // Define the response structure
@@ -60,12 +61,35 @@ fn parse_token_id_from_switch_error(error_msg: &str) -> Option<i64> {
         .and_then(|m| m.as_str().parse::<i64>().ok())
 }
 
-
 // Common handler for both GET and POST
 async fn handle_chat_request(
     _state: Arc<AppState>,
     request: ChatRequest,
 ) -> Json<Result<ChatResponse, ErrorResponse>> {
+    let required_token = match fs::read_to_string("access_token.txt") {
+        Ok(token) => token.trim().to_string(),
+        Err(_) => "".to_string(), // Treat as empty if read error occurs (e.g., file not found)
+    };
+
+    if !required_token.is_empty() {
+        match &request.access_token {
+            Some(user_token) if user_token.trim() == required_token => {
+                // Token matches, proceed
+                 println!("Access token validated successfully.");
+            }
+            _ => {
+                 println!("Invalid or missing access token provided in request.");
+                // Token doesn't match or is missing
+                return Json(Err(ErrorResponse {
+                    error: "Invalid or missing access token".to_string(),
+                }));
+            }
+        }
+    } else {
+         println!("No access token required (access_token.txt is empty or unreadable).");
+        // No token required, proceed
+    }
+
     // Initialize log database client
     let log_client = match log_client::DbClient::new("data.db") { // Ensure path is correct
         Ok(client) => client,
@@ -201,9 +225,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("Server listening on {}", addr);
-    println!("POST to /api/chat with JSON body {{ \"prompt\": \"...\", \"system_prompt\": \"...\", \"llm\": \"optional,comma,separated\" }}");
-    println!("GET from /api/chat?prompt=...&system_prompt=...&llm=optional,comma,separated");
-
+    println!("POST to /api/chat with JSON body {{ \"prompt\": \"...\", \"system_prompt\": \"...\", \"llm\": \"optional,comma,separated\", \"access_token\": \"...\" }}");
+    println!("GET from /api/chat?prompt=...&system_prompt=...&llm=optional,comma,separated&access_token=...");
 
     // Start the server
     axum::Server::bind(&addr)
