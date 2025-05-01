@@ -310,73 +310,26 @@ impl GeminiClient {
                 .await
                 .map_err(|e| LLMError(e.to_string()))?;
 
-        //     if response.status().is_success() {
-        //         let response_json: Value = response.json()
-        //             .await
-        //             .map_err(|e| LLMError(format!("Failed to parse JSON response: {}", e)))?;
+            if response.status().is_success() {
+                let response_json: Value = response.json()
+                    .await
+                    .map_err(|e| LLMError(format!("Failed to parse JSON response: {}", e)))?;
+                // println!("Debug Gemini response: {:?}", response_json); // Debugging line
 
-        //         // Adjusted parsing for non-streaming generateContent response
-        //         if let Some(candidates) = response_json.get("candidates") {
-        //              if let Some(candidate) = candidates.get(0) {
-        //                  if let Some(content) = candidate.get("content") {
-        //                      if let Some(parts) = content.get("parts") {
-        //                          if let Some(part) = parts.get(0) {
-        //                              if let Some(text) = part.get("text") {
-        //                                  if let Some(text_str) = text.as_str() {
-        //                                      return Ok(text_str.to_string());
-        //                                  }
-        //                              }
-        //                          }
-        //                      }
-        //                  }
-        //              }
-        //         }
-        //         Err(LLMError(format!("Failed to extract text from Gemini response: {:?}", response_json)))
-        //     } else {
-        //         let status = response.status();
-        //         let error_text = response.text().await.unwrap_or_else(|e| e.to_string());
-        //         Err(LLMError(format!("Error: {} - {}", status, error_text)))
-        //     }
-
-        if response.status().is_success() {
-            // Parse the response into a JSON Value
-            let response_json: Value = response.json()
-                .await
-                .map_err(|e| LLMError(format!("Failed to parse JSON response: {}", e)))?;
-            
-            // Check if the response is an array
-            if let Some(first_response) = response_json.as_array().and_then(|arr| arr.first()) {
-                // Try to extract text from the first object in the array
-                if let Some(candidates) = first_response.get("candidates") {
-                    if let Some(candidate) = candidates.get(0) {
-                        if let Some(content) = candidate.get("content") {
-                            if let Some(parts) = content.get("parts") {
-                                if let Some(part) = parts.get(0) {
-                                    if let Some(text) = part.get("text") {
-                                        if let Some(text_str) = text.as_str() {
-                                            return Ok(text_str.to_string());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // If we want to combine text from all responses in the array (optional)
-            if let Some(array) = response_json.as_array() {
-                let mut combined_text = String::new();
-                
-                for response_obj in array {
-                    if let Some(candidates) = response_obj.get("candidates") {
-                        if let Some(candidate) = candidates.get(0) {
-                            if let Some(content) = candidate.get("content") {
-                                if let Some(parts) = content.get("parts") {
-                                    if let Some(part) = parts.get(0) {
-                                        if let Some(text) = part.get("text") {
-                                            if let Some(text_str) = text.as_str() {
-                                                combined_text.push_str(text_str);
+                // Handle both array and object root responses
+                // Try array root
+                if let Some(array) = response_json.as_array() {
+                    let mut all_text = String::new();
+                    for obj in array {
+                        if let Some(candidates) = obj.get("candidates") {
+                            for candidate in candidates.as_array().unwrap_or(&vec![]) {
+                                if let Some(content) = candidate.get("content") {
+                                    if let Some(parts) = content.get("parts") {
+                                        for part in parts.as_array().unwrap_or(&vec![]) {
+                                            if let Some(text) = part.get("text") {
+                                                if let Some(text_str) = text.as_str() {
+                                                    all_text.push_str(text_str);
+                                                }
                                             }
                                         }
                                     }
@@ -384,22 +337,38 @@ impl GeminiClient {
                             }
                         }
                     }
+                    if !all_text.is_empty() {
+                        return Ok(all_text);
+                    }
                 }
-                
-                if !combined_text.is_empty() {
-                    return Ok(combined_text);
+                // Try object root (original logic)
+                if let Some(candidates) = response_json.get("candidates") {
+                    let mut all_text = String::new();
+                    for candidate in candidates.as_array().unwrap_or(&vec![]) {
+                        if let Some(content) = candidate.get("content") {
+                            if let Some(parts) = content.get("parts") {
+                                for part in parts.as_array().unwrap_or(&vec![]) {
+                                    if let Some(text) = part.get("text") {
+                                        if let Some(text_str) = text.as_str() {
+                                            all_text.push_str(text_str);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !all_text.is_empty() {
+                        return Ok(all_text);
+                    }
                 }
+                Err(LLMError(format!("Failed to extract text from Gemini response: {:?}", response_json)))
+            } else {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_else(|e| e.to_string());
+                Err(LLMError(format!("Error: {} - {}", status, error_text)))
             }
-            
-            Err(LLMError(format!("Failed to extract text from Gemini response: {:?}", response_json)))
-        } else {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|e| e.to_string());
-            Err(LLMError(format!("Error: {} - {}", status, error_text)))
-        }
         }.await;
 
-        
         AttemptResult { result }
     }
 }
@@ -434,6 +403,7 @@ impl LLMClient for GeminiClient {
 
         loop {
             let attempt_result = current_client.attempt_generate(prompt, system_prompt).await;
+            // println!("Debug Gemini attempt result: {:?}", attempt_result.result);
 
             match attempt_result.result {
                 Ok(response) => {

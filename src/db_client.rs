@@ -20,7 +20,7 @@ pub fn get_next_token_by_llms(llms: Option<&[&str]>) -> Result<Option<Token>> {
                 FROM TOKENS 
                 WHERE triggered_on IS NULL 
                 OR (triggered_on + delay_by_second) < ?
-                ORDER BY RANDOM()
+                ORDER BY triggered_on ASC
                 LIMIT 1
                 ".to_string(),
                 vec![current_time.into()],
@@ -33,7 +33,7 @@ pub fn get_next_token_by_llms(llms: Option<&[&str]>) -> Result<Option<Token>> {
                 FROM TOKENS 
                 WHERE (triggered_on IS NULL OR (triggered_on + delay_by_second) < ?)
                 AND token_type IN ({})
-                ORDER BY RANDOM()
+                ORDER BY triggered_on ASC
                 LIMIT 1
                 ",
                 placeholders
@@ -52,7 +52,7 @@ pub fn get_next_token_by_llms(llms: Option<&[&str]>) -> Result<Option<Token>> {
             FROM TOKENS 
             WHERE triggered_on IS NULL 
             OR (triggered_on + delay_by_second) < ?
-            ORDER BY RANDOM()
+            ORDER BY triggered_on ASC
             LIMIT 1
             ".to_string(),
             vec![current_time.into()],
