@@ -16,7 +16,7 @@ impl fmt::Display for LLMError {
 }
 
 // Configuration constants
-pub const MAX_RETRY_ATTEMPTS: u32 = 10;
+pub const MAX_RETRY_ATTEMPTS: u32 = 1;
 pub const RETRY_DELAY_SECONDS: u64 = 30;
 
 // Response from API attempt containing both result and used token info
@@ -115,6 +115,7 @@ async fn handle_retry(
     llm_conditions: Option<&[&str]>,
 ) -> Result<Option<(i64, String, String)>, LLMError> { // Returns Option<(id, value, type)> or fatal Error
     *attempts += 1;
+    sleep(Duration::from_secs(RETRY_DELAY_SECONDS)).await; // Sleep before retry
 
     if *attempts >= MAX_RETRY_ATTEMPTS {
         return Err(LLMError(format!(

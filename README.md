@@ -7,7 +7,6 @@ A Rust-based API server providing managed access to Large Language Models (LLMs)
 -   **LLM Support:** Google Gemini and OpenRouter.
 -   **Token Management:** Rotates LLM API keys stored in an SQLite database, respecting cooldown periods.
 -   **Rate Limiting:** Prevents exceeding API limits through token cooldowns.
--   **Retry Mechanism:** Automatically retries failed API calls.
 -   **Access Control:** Optional server-level access token for added security.
 -   **API Interface:** Supports both GET and POST requests to `/api/chat`.
 -   **Error Handling:** Gracefully handles API errors, network issues, and database problems.
@@ -189,20 +188,10 @@ http://localhost:3000/api/chat?prompt=What%20is%20Rust%3F&system_prompt=Explain%
 }
 ```
 
-## Configuration
-
-Retry behavior can be adjusted in `src/api_client.rs`:
-
-```rust
-pub const MAX_RETRY_ATTEMPTS: u32 = 10;    // Max retry attempts per request
-pub const RETRY_DELAY_SECONDS: u64 = 30;   // Delay between retries
-```
-
 ## Current Limitations
 
 -   Supports only Google Gemini and OpenRouter via specific client implementations.
 -   Token management relies on a local SQLite database.
--   Basic retry and cooldown logic.
 -   Single-instance deployment.
 
 ## Future Plans
