@@ -117,13 +117,6 @@ async fn handle_retry(
     *attempts += 1;
     sleep(Duration::from_secs(RETRY_DELAY_SECONDS)).await; // Sleep before retry
 
-    if *attempts >= MAX_RETRY_ATTEMPTS {
-        return Err(LLMError(format!(
-            "Max retry attempts ({}) reached. Last error on token {}: {}",
-            MAX_RETRY_ATTEMPTS, current_token_id, error
-        )));
-    }
-
     if let Err(log_err) = log_db.insert_log(
         system_prompt,
         prompt,
@@ -160,6 +153,13 @@ async fn handle_retry(
     // Then mark as troubled in all cases
     if let Err(db_err) = db_client::mark_token_trouble(current_token_id) {
         println!("Warning: Failed to mark token {} as troubled: {}", current_token_id, db_err);
+    }
+
+    if *attempts >= MAX_RETRY_ATTEMPTS {
+        return Err(LLMError(format!(
+            "Max retry attempts ({}) reached. Last error on token {}: {}",
+            MAX_RETRY_ATTEMPTS, current_token_id, error
+        )));
     }
 
     match db_client::get_next_token_by_llms(llm_conditions) {
