@@ -86,7 +86,7 @@ pub fn mark_token_trouble(token_id: i64) -> Result<()> {
     conn.execute(
         "UPDATE TOKENS SET 
         trouble_delay = 1, 
-        delay_by_second = delay_by_second + 3600 
+        delay_by_second = delay_by_second + 600 
         WHERE id = ?",
         params![token_id],
     )?;
@@ -137,7 +137,7 @@ pub fn clear_token_trouble(token_id: i64) -> Result<()> {
         conn.execute(
             "UPDATE TOKENS SET 
             trouble_delay = 0, 
-            delay_by_second = MAX(0, delay_by_second - 3600) 
+            delay_by_second = MAX(0, delay_by_second - 600) 
             WHERE id = ?",
             params![token_id],
         )?;
