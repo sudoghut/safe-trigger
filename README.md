@@ -78,8 +78,10 @@ You can build a release binary within a Fedora Docker container:
 2.  **Create Container:** `docker create --name safe-trigger-fedora-container safe-trigger-fedora`
 3.  **Copy Binary:** `docker cp safe-trigger-fedora-container:/app/target/release/safe-trigger .`
 4.  **Cleanup (Optional):** `docker rm safe-trigger-fedora-container`
+5.  **Remove Image (Optional):** `docker rmi safe-trigger-fedora`
 
-Now you have the `safe-trigger` binary built in the container, ready to run on a compatible system.
+Now you have the `safe-trigger` binary built in your host server, ready to run on a compatible system.
+
 
 ## Running as a Systemd Service (Fedora)
 
