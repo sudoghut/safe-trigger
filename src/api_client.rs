@@ -277,7 +277,7 @@ impl GeminiClient {
     }
 
     async fn attempt_generate(&self, prompt: &str, system_prompt: &str) -> AttemptResult {
-        let model_id = "gemini-2.5-flash-preview-04-17"; // Corrected model ID if needed, or keep as 2.0
+        let model_id = "gemini-2.5-flash"; // Corrected model ID if needed, or keep as 2.0
         let generate_content_api = "streamGenerateContent"; // Use generateContent for non-streaming
 
         let request_body = json!({
