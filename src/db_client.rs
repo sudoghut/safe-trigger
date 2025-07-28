@@ -125,6 +125,15 @@ pub fn is_token_in_trouble(token_id: i64) -> Result<bool> {
     }
 }
 
+pub fn increment_error_count(token: &str) -> Result<()> {
+    let conn = Connection::open("data.db")?;
+    conn.execute(
+        "UPDATE TOKENS SET error_count = error_count + 1 WHERE token = ?",
+        params![token],
+    )?;
+    Ok(())
+}
+
 pub fn clear_token_trouble(token_id: i64) -> Result<()> {
     let conn = Connection::open("data.db")?;
 

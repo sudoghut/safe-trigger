@@ -167,6 +167,10 @@ async fn handle_chat_request(
             }
             Err(e) => {
                 let error_string = e.to_string();
+                // Increment error_count for the token
+                if let Err(db_add_count_err) = db_client::increment_error_count(&current_token.token) {
+                    println!("Failed to increment error_count for token {}: {}", current_token.token, db_add_count_err);
+                }
                 // Check if it's the specific error indicating a client switch is needed
                 if error_string.contains("requires different client") {
                      println!("Detected token type switch requirement: {}", error_string);
@@ -202,7 +206,7 @@ async fn handle_chat_request(
                     }
                 } else {
                     // Any other error (max retries, initial unsupported type, DB error during retry, etc.)
-                     println!("Non-switch error encountered: {}", error_string);
+                    println!("Non-switch error encountered: {}", error_string);
                     return Json(Err(ErrorResponse { error: error_string }));
                 }
             }
