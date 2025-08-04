@@ -18,6 +18,7 @@ struct ChatRequest {
     system_prompt: String,
     llm: Option<String>, // Comma-separated list of LLMs, e.g. "gemini,openrouter"
     access_token: Option<String>, // Added access token field
+    search: Option<i32>, // Search parameter: 1 to enable Google search, 0 or None to disable
 }
 
 // Define the response structure
@@ -130,14 +131,14 @@ async fn handle_chat_request(
             "gemini" => {
                 println!("Using Gemini client with token ID: {}", current_token.id);
                 let client = GeminiClient::new(current_token.token.clone());
-                client.generate_response(&request.prompt, &request.system_prompt, current_token.id, &log_client, llm_conditions_slice).await
+                client.generate_response(&request.prompt, &request.system_prompt, current_token.id, &log_client, llm_conditions_slice, request.search).await
             },
             "openrouter" => {
                  println!("Using OpenRouter client with token ID: {}", current_token.id);
                 // Default model, could be made configurable
                 let model = "deepseek/deepseek-chat".to_string(); // Example model
                 let client = OpenRouterClient::new(current_token.token.clone(), model);
-                client.generate_response(&request.prompt, &request.system_prompt, current_token.id, &log_client, llm_conditions_slice).await
+                client.generate_response(&request.prompt, &request.system_prompt, current_token.id, &log_client, llm_conditions_slice, request.search).await
             },
             unsupported_type => {
                 println!("Encountered unsupported token type: {}", unsupported_type);
@@ -229,8 +230,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("Server listening on {}", addr);
-    println!("POST to /api/chat with JSON body {{ \"prompt\": \"...\", \"system_prompt\": \"...\", \"llm\": \"optional,comma,separated\", \"access_token\": \"...\" }}");
-    println!("GET from /api/chat?prompt=...&system_prompt=...&llm=optional,comma,separated&access_token=...");
+    println!("POST to /api/chat with JSON body {{ \"prompt\": \"...\", \"system_prompt\": \"...\", \"llm\": \"optional,comma,separated\", \"access_token\": \"...\", \"search\": 1 }}");
+    println!("GET from /api/chat?prompt=...&system_prompt=...&llm=optional,comma,separated&access_token=...&search=1");
+    println!("Note: search parameter (1 to enable Google search for Gemini, 0 or omit to disable) - only works with Gemini tokens");
 
     // Start the server
     axum::Server::bind(&addr)

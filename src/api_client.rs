@@ -33,6 +33,7 @@ pub trait LLMClient {
         initial_token_id: i64,
         log_db: &log_client::DbClient, // Add log client
         llm_conditions: Option<&[&str]>, // Add LLM conditions for retry
+        search: Option<i32>, // Add search parameter (1 to enable Google search, 0 or None to disable)
     ) -> Result<String, LLMError>;
 }
 
@@ -195,6 +196,7 @@ impl LLMClient for OpenRouterClient {
         initial_token_id: i64,
         log_db: &log_client::DbClient,
         llm_conditions: Option<&[&str]>,
+        _search: Option<i32>, // Note: OpenRouter doesn't support Google search, so this parameter is ignored
     ) -> Result<String, LLMError> {
         let mut attempts = 0;
         let mut current_token_id = initial_token_id;
@@ -276,14 +278,13 @@ impl GeminiClient {
         Self { api_key }
     }
 
-    async fn attempt_generate(&self, prompt: &str, system_prompt: &str) -> AttemptResult {
-        let model_id = "gemini-2.5-flash"; // Corrected model ID if needed, or keep as 2.0
-        let generate_content_api = "streamGenerateContent"; // Use generateContent for non-streaming
+    async fn attempt_generate(&self, prompt: &str, system_prompt: &str, search: Option<i32>) -> AttemptResult {
+        let model_id = "gemini-2.5-flash";
+        let generate_content_api = "generateContent"; // Use generateContent for non-streaming
 
-        let request_body = json!({
+        let mut request_body = json!({
             "contents": [
                 {
-                    "role": "user",
                     "parts": [ { "text": prompt } ]
                 }
             ],
@@ -295,9 +296,20 @@ impl GeminiClient {
             }
         });
 
+        // Add Google search tool if search parameter is 1
+        if let Some(search_value) = search {
+            if search_value == 1 {
+                request_body["tools"] = json!([
+                    {
+                        "google_search": {}
+                    }
+                ]);
+            }
+        }
+
         let api_url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:{}?key={}",
-            model_id, generate_content_api, self.api_key
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:{}",
+            model_id, generate_content_api
         );
 
         let client = reqwest::Client::new();
@@ -306,6 +318,7 @@ impl GeminiClient {
             let response = client
                 .post(&api_url)
                 .header("Content-Type", "application/json")
+                .header("x-goog-api-key", &self.api_key)
                 .json(&request_body)
                 .send()
                 .await
@@ -383,6 +396,7 @@ impl LLMClient for GeminiClient {
         initial_token_id: i64,
         log_db: &log_client::DbClient,
         llm_conditions: Option<&[&str]>,
+        search: Option<i32>, // Search parameter: 1 to enable Google search, 0 or None to disable
     ) -> Result<String, LLMError> {
         let mut attempts = 0;
         let mut current_token_id = initial_token_id;
@@ -403,7 +417,7 @@ impl LLMClient for GeminiClient {
         let mut current_token_value = initial_token_details.token.clone();
 
         loop {
-            let attempt_result = current_client.attempt_generate(prompt, system_prompt).await;
+            let attempt_result = current_client.attempt_generate(prompt, system_prompt, search).await;
             // println!("Debug Gemini attempt result: {:?}", attempt_result.result);
 
             match attempt_result.result {
