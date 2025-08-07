@@ -168,10 +168,26 @@ async fn handle_chat_request(
             }
             Err(e) => {
                 let error_string = e.to_string();
-                // Increment error_count for the token
-                if let Err(db_add_count_err) = db_client::increment_error_count(&current_token.token) {
-                    println!("Failed to increment error_count for token {}: {}", current_token.token, db_add_count_err);
+                
+                // Check if the error message contains suspension keywords
+                let suspension_keywords = ["suspended", "permission denied"];
+                let is_suspension_error = suspension_keywords.iter()
+                    .any(|&keyword| error_string.to_lowercase().contains(keyword));
+                
+                if is_suspension_error {
+                    // Mark token as suspended (error_count = -1)
+                    if let Err(db_suspend_err) = db_client::mark_token_suspended(&current_token.token) {
+                        println!("Failed to mark token as suspended for token {}: {}", current_token.token, db_suspend_err);
+                    } else {
+                        println!("Token {} marked as suspended due to error: {}", current_token.token, error_string);
+                    }
+                } else {
+                    // Increment error_count for the token
+                    if let Err(db_add_count_err) = db_client::increment_error_count(&current_token.token) {
+                        println!("Failed to increment error_count for token {}: {}", current_token.token, db_add_count_err);
+                    }
                 }
+                
                 // Check if it's the specific error indicating a client switch is needed
                 if error_string.contains("requires different client") {
                      println!("Detected token type switch requirement: {}", error_string);

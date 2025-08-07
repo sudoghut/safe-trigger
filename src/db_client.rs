@@ -18,8 +18,9 @@ pub fn get_next_token_by_llms(llms: Option<&[&str]>) -> Result<Option<Token>> {
                 "
                 SELECT id, token, token_type, triggered_on, delay_by_second, trouble_delay 
                 FROM TOKENS 
-                WHERE triggered_on IS NULL 
-                OR (triggered_on + delay_by_second) < ?
+                WHERE (triggered_on IS NULL 
+                OR (triggered_on + delay_by_second) < ?)
+                AND error_count != -1
                 ORDER BY triggered_on ASC
                 LIMIT 1
                 ".to_string(),
@@ -33,6 +34,7 @@ pub fn get_next_token_by_llms(llms: Option<&[&str]>) -> Result<Option<Token>> {
                 FROM TOKENS 
                 WHERE (triggered_on IS NULL OR (triggered_on + delay_by_second) < ?)
                 AND token_type IN ({})
+                AND error_count != -1
                 ORDER BY triggered_on ASC
                 LIMIT 1
                 ",
@@ -50,8 +52,9 @@ pub fn get_next_token_by_llms(llms: Option<&[&str]>) -> Result<Option<Token>> {
             "
             SELECT id, token, token_type, triggered_on, delay_by_second, trouble_delay 
             FROM TOKENS 
-            WHERE triggered_on IS NULL 
-            OR (triggered_on + delay_by_second) < ?
+            WHERE (triggered_on IS NULL 
+            OR (triggered_on + delay_by_second) < ?)
+            AND error_count != -1
             ORDER BY triggered_on ASC
             LIMIT 1
             ".to_string(),
@@ -129,6 +132,15 @@ pub fn increment_error_count(token: &str) -> Result<()> {
     let conn = Connection::open("data.db")?;
     conn.execute(
         "UPDATE TOKENS SET error_count = error_count + 1 WHERE token = ?",
+        params![token],
+    )?;
+    Ok(())
+}
+
+pub fn mark_token_suspended(token: &str) -> Result<()> {
+    let conn = Connection::open("data.db")?;
+    conn.execute(
+        "UPDATE TOKENS SET error_count = -1 WHERE token = ?",
         params![token],
     )?;
     Ok(())
