@@ -229,6 +229,9 @@ impl LLMClient for OpenRouterClient {
                     if let Err(e) = db_client::clear_token_trouble(current_token_id) {
                         println!("Warning: Failed to clear token trouble status for {}: {}", current_token_id, e);
                     }
+                    if let Err(e) = db_client::increment_valid_count(current_token_id) {
+                        println!("Warning: Failed to increment valid_count for token {}: {}", current_token_id, e);
+                    }
                     return Ok(response);
                 }
                 Err(e) => {
@@ -429,6 +432,9 @@ impl LLMClient for GeminiClient {
                     }
                     if let Err(e) = db_client::clear_token_trouble(current_token_id) {
                         println!("Warning: Failed to clear token trouble status for {}: {}", current_token_id, e);
+                    }
+                    if let Err(e) = db_client::increment_valid_count(current_token_id) {
+                        println!("Warning: Failed to increment valid_count for token {}: {}", current_token_id, e);
                     }
                     return Ok(response);
                 }

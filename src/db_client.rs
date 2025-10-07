@@ -146,6 +146,15 @@ pub fn mark_token_suspended(token: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn increment_valid_count(token_id: i64) -> Result<()> {
+    let conn = Connection::open("data.db")?;
+    conn.execute(
+        "UPDATE TOKENS SET valid_count = COALESCE(valid_count, 0) + 1 WHERE id = ?",
+        params![token_id],
+    )?;
+    Ok(())
+}
+
 pub fn clear_token_trouble(token_id: i64) -> Result<()> {
     let conn = Connection::open("data.db")?;
 
